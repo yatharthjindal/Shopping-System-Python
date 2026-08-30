@@ -55,8 +55,6 @@ Shopping-System-Python/
 │   ├── customer_orders_feedback.png
 │   ├── seller_products.png
 │   └── seller_orders_management.png
-└── docs/
-    └── CS PROJECT ECOMMERCE 2025-26-1.pdf
 ```
 
 ## Screenshots
