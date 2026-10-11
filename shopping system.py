@@ -1,5 +1,47 @@
 import mysql.connector
+import bcrypt
 from datetime import date
+
+
+
+def hash_password(password):
+    if not isinstance(password, str) or not password:
+        raise ValueError("Password cannot be empty.")
+
+    password_bytes = password.encode("utf-8")
+
+    if len(password_bytes) > 72:
+        raise ValueError("Password must not exceed 72 bytes.")
+
+    hashed = bcrypt.hashpw(
+        password_bytes,
+        bcrypt.gensalt()
+    )
+
+    return hashed.decode("utf-8")
+
+
+def verify_password(password, stored_hash):
+    if not isinstance(password, str) or not password:
+        return False
+
+    if not isinstance(stored_hash, str) or not stored_hash:
+        return False
+
+    password_bytes = password.encode("utf-8")
+
+    if len(password_bytes) > 72:
+        return False
+
+    try:
+        return bcrypt.checkpw(
+            password_bytes,
+            stored_hash.encode("utf-8")
+        )
+    except (ValueError, TypeError):
+        return False
+
+
 
 # ------------------------------------------------
 # DATABASE CONNECTION
@@ -25,112 +67,202 @@ def check_username(table, username):
 # ------------------------------------------------
 # CUSTOMER REGISTRATION
 # ------------------------------------------------
+
+
 def create_customer():
     print("\n---- Customer Registration ----")
-    fname = input("Full Name: ")
-    uname = input("Username: ")
-    while check_username("customers", uname):
-        print("⚠ Username already exists! Try another.")
-        uname = input("Username: ")
 
-    pwd = input("Password: ")
+    fname = input("Full Name: ").strip()
+    uname = input("Username: ").strip()
+
+    while not uname or check_username("customers", uname):
+        if not uname:
+            print("❌ Username cannot be empty.")
+        else:
+            print("⚠ Username already exists! Try another.")
+        uname = input("Username: ").strip()
 
     while True:
-        phone = input("Phone (10 digits): ")
+        pwd = input("Password: ")
+        try:
+            hashed_pwd = hash_password(pwd)
+            break
+        except ValueError as e:
+            print(f"❌ {e}")
+
+    while True:
+        phone = input("Phone (10 digits): ").strip()
         if phone.isdigit() and len(phone) == 10:
             break
-        else:
-            print("❌ Phone number must be exactly 10 digits")
+        print("❌ Phone number must be exactly 10 digits")
 
-    address = input("Address: ")
-    email = input("Email: ")
+    address = input("Address: ").strip()
+    email = input("Email: ").strip()
 
-    cursor.execute("SELECT MAX(Customer_ID) FROM customers")
-    r = cursor.fetchone()
-    cid = 1 if r[0] is None else r[0] + 1
+    try:
+        cursor.execute("""
+            INSERT INTO customers
+            (Cust_Name, User_Name, Password, Phone_No, Address, Email_ID)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (fname, uname, hashed_pwd, phone, address, email))
 
-    cursor.execute("""
-        INSERT INTO customers
-        (Customer_ID, Cust_Name, User_Name, Password, Phone_No, Address, Email_ID)
-        VALUES (%s,%s,%s,%s,%s,%s,%s)
-    """, (cid, fname, uname, pwd, phone, address, email))
+        cid = cursor.lastrowid
+        conn.commit()
+        print(f"✔ Registered Successfully! Customer ID: {cid}")
 
-    conn.commit()
-    print(f"✔ Registered Successfully! Customer ID: {cid}")
+    except mysql.connector.Error as e:
+        conn.rollback()
+        print("❌ Customer registration failed:", e)
+
+
 
 # ------------------------------------------------
 # CUSTOMER LOGIN
 # ------------------------------------------------
+
 def login_customer():
-    uname = input("Username: ")
+    uname = input("Username: ").strip()
     pwd = input("Password: ")
 
     cursor.execute("""
-        SELECT Customer_ID, Cust_Name
+        SELECT Customer_ID, Cust_Name, Password
         FROM customers
-        WHERE User_Name=%s AND Password=%s
-    """, (uname, pwd))
+        WHERE User_Name = %s
+    """, (uname,))
 
-    u = cursor.fetchone()
-    if u:
-        print(f"✔ Welcome {u[1]}")
-        customer_menu(u[0])
+    user = cursor.fetchone()
+
+    if not user or not user[2]:
+        print("❌ Invalid Login")
+        return
+
+    cid, name, stored_password = user
+
+    try:
+        if stored_password.startswith(("$2a$", "$2b$", "$2y$")):
+            valid = verify_password(pwd, stored_password)
+        else:
+            valid = (pwd == stored_password)
+
+            if valid:
+                new_hash = hash_password(pwd)
+                cursor.execute("""
+                    UPDATE customers
+                    SET Password = %s
+                    WHERE Customer_ID = %s
+                """, (new_hash, cid))
+                conn.commit()
+
+    except (ValueError, TypeError) as e:
+        conn.rollback()
+        print("❌ Login verification error:", e)
+        return
+
+    if valid:
+        print(f"✔ Welcome {name}")
+        customer_menu(cid)
     else:
         print("❌ Invalid Login")
 
 # ------------------------------------------------
 # SELLER REGISTRATION
 # ------------------------------------------------
+
+
 def create_seller():
     print("\n---- Seller Registration ----")
-    sname = input("Seller Name: ")
-    bname = input("Brand Name: ")
-    uname = input("Username: ")
-    while check_username("seller", uname):
-        print("⚠ Username already exists!")
-        uname = input("Username: ")
 
-    pwd = input("Password: ")
+    sname = input("Seller Name: ").strip()
+    bname = input("Brand Name: ").strip()
+    uname = input("Username: ").strip()
+
+    while not uname or check_username("seller", uname):
+        if not uname:
+            print("❌ Username cannot be empty.")
+        else:
+            print("⚠ Username already exists! Try another.")
+        uname = input("Username: ").strip()
 
     while True:
-        phone = input("Phone (10 digits): ")
+        pwd = input("Password: ")
+        try:
+            hashed_pwd = hash_password(pwd)
+            break
+        except ValueError as e:
+            print(f"❌ {e}")
+
+    while True:
+        phone = input("Phone (10 digits): ").strip()
         if phone.isdigit() and len(phone) == 10:
             break
-        else:
-            print("❌ Phone number must be exactly 10 digits")
+        print("❌ Phone number must be exactly 10 digits")
 
-    email = input("Email: ")
+    email = input("Email: ").strip()
 
-    cursor.execute("SELECT MAX(Seller_ID) FROM seller")
-    r = cursor.fetchone()
-    sid = 1 if r[0] is None else r[0] + 1
+    try:
+        cursor.execute("""
+            INSERT INTO seller
+            (Seller_Name, Brand_Name, User_Name,
+             Password, Phone_No, Email_ID)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (sname, bname, uname, hashed_pwd, phone, email))
 
-    cursor.execute("""
-        INSERT INTO seller
-        (Seller_ID, Seller_Name, Brand_Name, User_name, Password, Phone_No, Email_ID)
-        VALUES (%s,%s,%s,%s,%s,%s,%s)
-    """, (sid, sname, bname, uname, pwd, phone, email))
+        sid = cursor.lastrowid
+        conn.commit()
+        print(f"✔ Seller Registered! Seller ID: {sid}")
 
-    conn.commit()
-    print(f"✔ Seller Registered! Seller ID: {sid}")
+    except mysql.connector.Error as e:
+        conn.rollback()
+        print("❌ Seller registration failed:", e)
+
+
+
 
 # ------------------------------------------------
 # SELLER LOGIN
 # ------------------------------------------------
+
 def login_seller():
-    uname = input("Username: ")
+    uname = input("Username: ").strip()
     pwd = input("Password: ")
 
     cursor.execute("""
-        SELECT Seller_ID, Seller_Name
+        SELECT Seller_ID, Seller_Name, Password
         FROM seller
-        WHERE User_Name=%s AND Password=%s
-    """, (uname, pwd))
+        WHERE User_Name = %s
+    """, (uname,))
 
-    s = cursor.fetchone()
-    if s:
-        print(f"✔ Welcome Seller {s[1]}")
-        seller_menu(s[0])
+    seller = cursor.fetchone()
+
+    if not seller or not seller[2]:
+        print("❌ Invalid Login")
+        return
+
+    sid, name, stored_password = seller
+
+    try:
+        if stored_password.startswith(("$2a$", "$2b$", "$2y$")):
+            valid = verify_password(pwd, stored_password)
+        else:
+            valid = (pwd == stored_password)
+
+            if valid:
+                new_hash = hash_password(pwd)
+                cursor.execute("""
+                    UPDATE seller
+                    SET Password = %s
+                    WHERE Seller_ID = %s
+                """, (new_hash, sid))
+                conn.commit()
+
+    except (ValueError, TypeError) as e:
+        conn.rollback()
+        print("❌ Login verification error:", e)
+        return
+
+    if valid:
+        print(f"✔ Welcome Seller {name}")
+        seller_menu(sid)
     else:
         print("❌ Invalid Login")
 
@@ -169,43 +301,75 @@ def view_history(cid):
     for r in rows:
         print(r)
 
+
 # ------------------------------------------------
 # PLACE ORDER
 # ------------------------------------------------
+
 def place_order(cid):
-    pid = int(input("Product ID: "))
-    qty = int(input("Quantity: "))
-
-    cursor.execute("SELECT Quantity, Price FROM products WHERE Product_ID=%s", (pid,))
-    r = cursor.fetchone()
-    if not r:
-        print("❌ Invalid Product")
+    try:
+        pid = int(input("Product ID: "))
+        qty = int(input("Quantity: "))
+    except ValueError:
+        print("❌ Please enter valid whole numbers.")
         return
 
-    stock, price = r
-    if qty > stock:
-        print("⚠ Not enough stock")
+    if pid <= 0:
+        print("❌ Product ID must be positive.")
         return
 
-    total = qty * price
+    if qty <= 0:
+        print("❌ Quantity must be greater than zero.")
+        return
 
-    cursor.execute(
-        "UPDATE products SET Quantity=Quantity-%s WHERE Product_ID=%s",
-        (qty, pid)
-    )
+    try:
+        cursor.execute(
+            "SELECT Quantity, Price FROM products WHERE Product_ID = %s",
+            (pid,)
+        )
+        r = cursor.fetchone()
 
-    cursor.execute("SELECT MAX(Transaction_ID) FROM orders")
-    r = cursor.fetchone()
-    tid = 1 if r[0] is None else r[0] + 1
+        if not r:
+            print("❌ Invalid Product")
+            return
 
-    cursor.execute("""
-        INSERT INTO orders
-        (Transaction_ID, Customer_ID, Product_ID, Date_of_Dispatch, Quantity, Price, Amount)
-        VALUES (%s,%s,%s,%s,%s,%s,%s)
-    """, (tid, cid, pid, date.today(), qty, price, total))
+        stock, price = r
 
-    conn.commit()
-    print("✔ Order Placed Successfully")
+        if qty > stock:
+            print("⚠ Not enough stock")
+            return
+
+        total = qty * price
+
+        cursor.execute(
+            """UPDATE products
+               SET Quantity = Quantity - %s
+               WHERE Product_ID = %s AND Quantity >= %s""",
+            (qty, pid, qty)
+        )
+
+        if cursor.rowcount != 1:
+            conn.rollback()
+            print("⚠ Stock changed or is insufficient. Please try again.")
+            return
+
+        cursor.execute("""
+            INSERT INTO orders
+            (Customer_ID, Product_ID, Date_of_Dispatch,
+             Quantity, Price, Amount)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (cid, pid, date.today(), qty, price, total))
+
+        tid = cursor.lastrowid
+
+        conn.commit()
+        print(f"✔ Order Placed Successfully! Transaction ID: {tid}")
+
+    except mysql.connector.Error as e:
+        conn.rollback()
+        print("❌ Order failed. Database changes were rolled back.")
+        print("Error:", e)
+
 
 # ------------------------------------------------
 # CUSTOMER FEEDBACK
@@ -288,24 +452,40 @@ def seller_orders(sid):
     for r in cursor.fetchall():
         print(r)
 
+
 def add_product(sid):
-    pid = int(input("Product ID: "))
-    cat = input("Category: ")
-    name = input("Name: ")
+    cat = input("Category: ").strip()
+    name = input("Name: ").strip()
     qty = int(input("Quantity: "))
     price = float(input("Price: "))
 
-    cursor.execute("SELECT Brand_Name FROM seller WHERE Seller_ID=%s", (sid,))
-    bname = cursor.fetchone()[0]
+    cursor.execute(
+        "SELECT Brand_Name FROM seller WHERE Seller_ID = %s",
+        (sid,)
+    )
+    result = cursor.fetchone()
 
-    cursor.execute("""
-        INSERT INTO products
-        (Product_ID, Category, Name, Quantity, Price, Brand_Name, Seller_ID)
-        VALUES (%s,%s,%s,%s,%s,%s,%s)
-    """, (pid, cat, name, qty, price, bname, sid))
+    if result is None:
+        print("❌ Seller not found.")
+        return
 
-    conn.commit()
-    print("✔ Product Added")
+    bname = result[0]
+
+    try:
+        cursor.execute("""
+            INSERT INTO products
+            (Category, Name, Quantity, Price, Brand_Name, Seller_ID)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (cat, name, qty, price, bname, sid))
+
+        pid = cursor.lastrowid
+        conn.commit()
+        print(f"✔ Product Added! Product ID: {pid}")
+
+    except mysql.connector.Error as e:
+        conn.rollback()
+        print("❌ Product addition failed:", e)
+
 
 # ------------------------------------------------
 # CUSTOMER MENU

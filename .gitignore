@@ -1,0 +1,12 @@
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+.venv/
+venv/
+
+# Local secrets and database backups
+.env
+*.sql
