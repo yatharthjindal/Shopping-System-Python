@@ -55,8 +55,6 @@ Shopping-System-Python/
 │   ├── customer_orders_feedback.png
 │   ├── seller_products.png
 │   └── seller_orders_management.png
-└── docs/
-    └── CS PROJECT ECOMMERCE 2025-26-1.pdf
 ```
 
 ## Screenshots
@@ -76,12 +74,6 @@ Shopping-System-Python/
 ### Seller Orders Management
 
 ![Seller Orders Management](screenshot/seller_orders_management.png)
-
-## Project Documentation
-
-The complete Class 12 CBSE Computer Science project report is available here:
-
-[View Project Documentation](docs/CS%20PROJECT%20ECOMMERCE%202025-26-1.pdf)
 
 ## Future Improvements
 
